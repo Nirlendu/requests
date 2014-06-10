@@ -32,6 +32,8 @@ DEFAULT_POOLSIZE = 10
 DEFAULT_RETRIES = 0
 
 
+import zmq
+
 class BaseAdapter(object):
     """The Base Transport Adapter"""
 
@@ -43,6 +45,82 @@ class BaseAdapter(object):
 
     def close(self):
         raise NotImplementedError
+
+
+class Response():
+	content=""
+	history=""
+	elapsed=""
+
+	status_code = ""
+
+	# Make headers case-insensitive.
+	headers = ""
+
+	# Set encoding.
+	encoding = ""
+	raw = ""
+	reason = ""
+
+	#if isinstance(req.url, bytes):
+	#    response.url = req.url.decode('utf-8')
+	#else:
+	#    response.url = req.url
+
+	# Add new cookies from the server.
+	#extract_cookies_to_jar(response.cookies, req, resp)
+	url=""
+	# Give the Response some context.
+        request =""
+	connection = ""
+	is_redirect=""
+
+
+
+class ZMQAdapter(BaseAdapter):
+
+	def build_response(self,req,res):
+
+		response=Response()
+		response.content=res
+		response.history=""
+		response.elapsed=""
+
+		response.status_code = "Perfect"
+
+		# Make headers case-insensitive.
+		response.headers = ""
+
+		# Set encoding.
+		response.encoding = ""
+		response.raw = ""
+		response.reason = ""
+
+		#if isinstance(req.url, bytes):
+		#    response.url = req.url.decode('utf-8')
+		#else:
+		#    response.url = req.url
+
+		# Add new cookies from the server.
+			#extract_cookies_to_jar(response.cookies, req, resp)
+		response.url='tcp://127.0.0.1:5678'
+		# Give the Response some context.
+		response.request = req
+		response.connection = self
+		return response
+
+
+
+
+	def send(self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None):
+		context = zmq.Context()
+		sock = context.socket(zmq.REQ)
+		sock.connect('tcp://127.0.0.1:5678')
+		sock.send("hey")
+		return self.build_response('tcp://127.0.0.1:5678',sock.recv())
+
+
+
 
 
 class HTTPAdapter(BaseAdapter):
@@ -101,6 +179,10 @@ class HTTPAdapter(BaseAdapter):
         self.init_poolmanager(self._pool_connections, self._pool_maxsize,
                               block=self._pool_block)
 
+
+
+
+
     def init_poolmanager(self, connections, maxsize, block=DEFAULT_POOLBLOCK):
         """Initializes a urllib3 PoolManager. This method should not be called
         from user code, and is only exposed for use when subclassing the
@@ -118,42 +200,9 @@ class HTTPAdapter(BaseAdapter):
         self.poolmanager = PoolManager(num_pools=connections, maxsize=maxsize,
                                        block=block)
 
-    def cert_verify(self, conn, url, verify, cert):
-        """Verify a SSL certificate. This method should not be called from user
-        code, and is only exposed for use when subclassing the
-        :class:`HTTPAdapter <requests.adapters.HTTPAdapter>`.
 
-        :param conn: The urllib3 connection object associated with the cert.
-        :param url: The requested URL.
-        :param verify: Whether we should actually verify the certificate.
-        :param cert: The SSL certificate to verify.
-        """
-        if url.lower().startswith('https') and verify:
 
-            cert_loc = None
 
-            # Allow self-specified cert location.
-            if verify is not True:
-                cert_loc = verify
-
-            if not cert_loc:
-                cert_loc = DEFAULT_CA_BUNDLE_PATH
-
-            if not cert_loc:
-                raise Exception("Could not find a suitable SSL CA certificate bundle.")
-
-            conn.cert_reqs = 'CERT_REQUIRED'
-            conn.ca_certs = cert_loc
-        else:
-            conn.cert_reqs = 'CERT_NONE'
-            conn.ca_certs = None
-
-        if cert:
-            if not isinstance(cert, basestring):
-                conn.cert_file = cert[0]
-                conn.key_file = cert[1]
-            else:
-                conn.cert_file = cert
 
     def build_response(self, req, resp):
         """Builds a :class:`Response <requests.Response>` object from a urllib3
@@ -191,6 +240,10 @@ class HTTPAdapter(BaseAdapter):
 
         return response
 
+
+
+
+
     def get_connection(self, url, proxies=None):
         """Returns a urllib3 connection for the given URL. This should not be
         called from user code, and is only exposed for use when subclassing the
@@ -223,6 +276,8 @@ class HTTPAdapter(BaseAdapter):
 
         return conn
 
+
+
     def close(self):
         """Disposes of any internal state.
 
@@ -230,6 +285,8 @@ class HTTPAdapter(BaseAdapter):
         connections.
         """
         self.poolmanager.clear()
+
+
 
     def request_url(self, request, proxies):
         """Obtain the url to use when making the final request.
@@ -255,6 +312,8 @@ class HTTPAdapter(BaseAdapter):
 
         return url
 
+
+
     def add_headers(self, request, **kwargs):
         """Add any headers needed by the connection. As of v2.0 this does
         nothing by default, but is left for overriding by users that subclass
@@ -268,6 +327,8 @@ class HTTPAdapter(BaseAdapter):
         :param kwargs: The keyword arguments from the call to send().
         """
         pass
+
+
 
     def proxy_headers(self, proxy):
         """Returns a dictionary of the headers to add to any request sent
@@ -291,6 +352,8 @@ class HTTPAdapter(BaseAdapter):
 
         return headers
 
+
+
     def send(self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None):
         """Sends PreparedRequest object. Returns Response object.
 
@@ -304,11 +367,12 @@ class HTTPAdapter(BaseAdapter):
 
         conn = self.get_connection(request.url, proxies)
 
-        self.cert_verify(conn, request.url, verify, cert)
+        #self.cert_verify(conn, request.url, verify, cert)
         url = self.request_url(request, proxies)
         self.add_headers(request)
 
-        chunked = not (request.body is None or 'Content-Length' in request.headers)
+        #chunked = not (request.body is None or 'Content-Length' in request.headers)
+	chunked=1;
 
         timeout = TimeoutSauce(connect=timeout, read=timeout)
 
@@ -329,6 +393,7 @@ class HTTPAdapter(BaseAdapter):
 
             # Send the request.
             else:
+		"""
                 if hasattr(conn, 'proxy_pool'):
                     conn = conn.proxy_pool
 
@@ -352,21 +417,26 @@ class HTTPAdapter(BaseAdapter):
                     low_conn.send(b'0\r\n\r\n')
 
                     r = low_conn.getresponse()
-                    resp = HTTPResponse.from_httplib(
+                    res = HTTPResponse.from_httplib(
                         r,
                         pool=conn,
                         connection=low_conn,
                         preload_content=False,
                         decode_content=False
                     )
-                except:
+		    """
+
+
+
+		    #res="test"
+		#except:
                     # If we hit any problems here, clean up the connection.
                     # Then, reraise so that we can handle the actual exception.
-                    low_conn.close()
-                    raise
-                else:
+		#low_conn.close()
+		#raise
+		#else:
                     # All is well, return the connection to the pool.
-                    conn._put_conn(low_conn)
+		#conn._put_conn(low_conn)
 
         except socket.error as sockerr:
             raise ConnectionError(sockerr, request=request)
@@ -385,4 +455,4 @@ class HTTPAdapter(BaseAdapter):
             else:
                 raise
 
-        return self.build_response(request, resp)
+        return self.build_response(request, res)
